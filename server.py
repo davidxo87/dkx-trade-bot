@@ -7,12 +7,12 @@ from flask import Flask, request, jsonify
 app = Flask(__name__)
 
 TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
-TELEGRAM_CHAT_ID   = os.environ.get('TELEGRAM_CHAT_ID')
-TELEGRAM_TOPIC_ID  = os.environ.get('TELEGRAM_TOPIC_ID', '3')
-CHART_IMG_API_KEY  = os.environ.get('CHART_IMG_API_KEY')
-TV_SESSION_ID      = os.environ.get('TV_SESSION_ID')
-TV_SESSION_SIGN    = os.environ.get('TV_SESSION_SIGN')
-TV_LAYOUT_ID       = 'Jx8LhHYY'
+TELEGRAM_CHAT_ID    = os.environ.get('TELEGRAM_CHAT_ID')
+TELEGRAM_TOPIC_ID   = os.environ.get('TELEGRAM_TOPIC_ID', '3')
+CHART_IMG_API_KEY   = os.environ.get('CHART_IMG_API_KEY')
+TV_SESSION_ID       = os.environ.get('TV_SESSION_ID')
+TV_SESSION_SIGN     = os.environ.get('TV_SESSION_SIGN')
+TV_LAYOUT_ID        = 'Jx8LhHYY'
 
 DISCLAIMER = 'Diese Trade Idea dient ausschliesslich zu Informations- und Bildungszwecken und stellt keine Anlageberatung dar.'
 
@@ -46,15 +46,21 @@ def parse_body(raw):
     return data
 
 def get_layout_chart():
-    """Dein eigener TradingView Chart via Chart-IMG Layout API."""
+    """Deinen eigenen TradingView Chart via Chart-IMG Layout API (POST)."""
     try:
         url = f'https://api.chart-img.com/v2/tradingview/layout-chart/{TV_LAYOUT_ID}'
         headers = {
             'x-api-key': CHART_IMG_API_KEY,
             'tradingview-session-id': TV_SESSION_ID,
-            'tradingview-session-id-sign': TV_SESSION_SIGN
+            'tradingview-session-id-sign': TV_SESSION_SIGN,
+            'Content-Type': 'application/json'
         }
-        r = requests.get(url, headers=headers, timeout=30)
+        body = {
+            'theme': 'dark',
+            'width': 800,
+            'height': 500
+        }
+        r = requests.post(url, headers=headers, json=body, timeout=60)
         print(f'Layout chart status: {r.status_code}')
         if r.status_code == 200:
             return r.content
@@ -84,6 +90,7 @@ def get_symbol_chart(symbol, interval):
         r = requests.get(url, params=params, timeout=30)
         if r.status_code == 200:
             return r.content
+        print(f'Symbol chart error: {r.status_code} {r.text[:200]}')
     except Exception as e:
         print(f'Symbol chart error: {e}')
     return None
@@ -144,14 +151,14 @@ def webhook():
         caption = (
             f'<b>\U0001f4ca DKX Trade Idea</b>\n'
             f'\U0001f4c8 <b>{symbol}</b> | {dir_emoji}\n\n'
-            f'\U0001f3af Entry:       <code>{entry}</code>\n'
-            f'\U0001f6d1 Stop Loss:  <code>{sl}</code>\n'
+            f'\U0001f3af Entry: <code>{entry}</code>\n'
+            f'\U0001f6d1 Stop Loss: <code>{sl}</code>\n'
             f'{tp_lines}\n'
             f'<i>\u26a0\ufe0f {DISCLAIMER}</i>\n'
             f'<i>\u2014 DKX Market Insights</i>'
         )
 
-        # Erst deinen Layout-Chart versuchen, dann Fallback
+        # Erst Layout-Chart (eigener Chart), dann Fallback auf Symbol-Chart
         img = get_layout_chart()
         if not img:
             print('Layout chart failed, using symbol fallback')
