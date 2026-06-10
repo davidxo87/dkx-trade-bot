@@ -10,6 +10,9 @@ TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
 TELEGRAM_CHAT_ID   = os.environ.get('TELEGRAM_CHAT_ID')
 TELEGRAM_TOPIC_ID  = os.environ.get('TELEGRAM_TOPIC_ID', '3')
 CHART_IMG_API_KEY  = os.environ.get('CHART_IMG_API_KEY')
+TV_SESSION_ID      = os.environ.get('TV_SESSION_ID')
+TV_SESSION_SIGN    = os.environ.get('TV_SESSION_SIGN')
+TV_LAYOUT_ID       = 'Jx8LhHYY'
 
 DISCLAIMER = 'Diese Trade Idea dient ausschliesslich zu Informations- und Bildungszwecken und stellt keine Anlageberatung dar.'
 
@@ -42,7 +45,26 @@ def parse_body(raw):
             data['tp3'] = line.replace('Take Profit 3:', '').strip()
     return data
 
-def get_chart_image(symbol, interval):
+def get_layout_chart():
+    """Dein eigener TradingView Chart via Chart-IMG Layout API."""
+    try:
+        url = f'https://api.chart-img.com/v2/tradingview/layout-chart/{TV_LAYOUT_ID}'
+        headers = {
+            'x-api-key': CHART_IMG_API_KEY,
+            'tradingview-session-id': TV_SESSION_ID,
+            'tradingview-session-id-sign': TV_SESSION_SIGN
+        }
+        r = requests.get(url, headers=headers, timeout=30)
+        print(f'Layout chart status: {r.status_code}')
+        if r.status_code == 200:
+            return r.content
+        print(f'Layout chart error: {r.text[:300]}')
+    except Exception as e:
+        print(f'Layout chart exception: {e}')
+    return None
+
+def get_symbol_chart(symbol, interval):
+    """Fallback: einfacher Symbol-Chart via Chart-IMG."""
     try:
         interval_map = {
             '1': '1m', '3': '3m', '5': '5m', '15': '15m',
@@ -50,7 +72,7 @@ def get_chart_image(symbol, interval):
             '240': '4h', '4h': '4h', 'D': '1D', '1D': '1D', 'W': '1W'
         }
         tf = interval_map.get(str(interval), '5m')
-        url = 'https://api.chart-img.com/v2/tradingview/advanced-chart/storage'
+        url = 'https://api.chart-img.com/v1/tradingview/advanced-chart'
         params = {
             'symbol': symbol,
             'interval': tf,
@@ -62,9 +84,8 @@ def get_chart_image(symbol, interval):
         r = requests.get(url, params=params, timeout=30)
         if r.status_code == 200:
             return r.content
-        print(f'Chart-IMG: {r.status_code} {r.text[:200]}')
     except Exception as e:
-        print(f'Chart error: {e}')
+        print(f'Symbol chart error: {e}')
     return None
 
 def send_photo(image_bytes, caption):
@@ -113,24 +134,29 @@ def webhook():
         dir_emoji = '\U0001f7e2 LONG' if d == 'LONG' else '\U0001f534 SHORT' if d == 'SHORT' else direction
 
         tp_lines = ''
-        if tp1:
+        if tp1 and tp1 != '0':
             tp_lines += f'\U0001f3c6 Take Profit 1: <code>{tp1}</code>\n'
-        if tp2:
+        if tp2 and tp2 != '0':
             tp_lines += f'\U0001f3c6 Take Profit 2: <code>{tp2}</code>\n'
-        if tp3:
+        if tp3 and tp3 != '0':
             tp_lines += f'\U0001f3c6 Take Profit 3: <code>{tp3}</code>\n'
 
         caption = (
             f'<b>\U0001f4ca DKX Trade Idea</b>\n'
             f'\U0001f4c8 <b>{symbol}</b> | {dir_emoji}\n\n'
-            f'\U0001f3af Entry:      <code>{entry}</code>\n'
-            f'\U0001f6d1 Stop Loss: <code>{sl}</code>\n'
+            f'\U0001f3af Entry:       <code>{entry}</code>\n'
+            f'\U0001f6d1 Stop Loss:  <code>{sl}</code>\n'
             f'{tp_lines}\n'
             f'<i>\u26a0\ufe0f {DISCLAIMER}</i>\n'
             f'<i>\u2014 DKX Market Insights</i>'
         )
 
-        img = get_chart_image(symbol, interval)
+        # Erst deinen Layout-Chart versuchen, dann Fallback
+        img = get_layout_chart()
+        if not img:
+            print('Layout chart failed, using symbol fallback')
+            img = get_symbol_chart(symbol, interval)
+
         result = send_photo(img, caption) if img else send_message(caption)
         print(f'Telegram: {result}')
         return jsonify({'status': 'ok'}), 200
